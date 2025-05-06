@@ -1,0 +1,13 @@
+# .gitignore
+
+# data output
+data/output/
+
+# environment
+.env
+
+# node modules
+node_modules/
+
+# DS store
+.DS_store
