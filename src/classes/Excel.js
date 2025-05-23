@@ -635,8 +635,28 @@ export class Excel {
             }
             // return formula if available
             else if (format === "formula") {
-                return valueType !== "object" ? cell.value : cell.value?.formula;
-            } 
+                const val = cell.value;
+
+                // Standard formula
+                if (typeof val === "object" && val.formula) {
+                    return { formula: val.formula, result: val.result };
+                }
+
+                // Shared formula
+                if (typeof val === "object" && val.sharedFormula) {
+                    const sheet = this.workbooks[this.activeWorkbook].getWorksheet(this.activeSheet);
+                    const sourceCell = sheet.getCell(val.sharedFormula);
+
+                    if (sourceCell?.value?.formula) {
+                        return {
+                            formula: sourceCell.value.formula, // use original formula
+                            result: val.result
+                        };
+                    }
+                }
+
+                return val;
+            }
             // return cell styles
             else if (format === "style") {
                 return cell.style;
@@ -655,7 +675,7 @@ export class Excel {
         // ensure refs is loopable
         if (!Array.isArray(refs)) {
             refs = [refs];
-        } 
+        }
         // [1, 2] format
         else if (refs.length === 2) {
             range.push(this.fetch([refs[0], refs[1]], format));
@@ -713,8 +733,101 @@ export class Excel {
 
     /* setting data */
 
-    set() { }
-    setRange() { }
+    set(ref, value, format = "value") {
+
+        // no sheet selected
+        if (!this.activeSheet) {
+            console.log("no active sheet selected");
+
+            return false;
+        }
+
+        let col, row;
+
+        // "A1" format
+        if (typeof ref === "string") {
+            [[col, row]] = this.#refToAddress(ref);
+        }
+        // [1, 2] format
+        else if (Array.isArray(ref) && ref.length === 2) {
+            col = ref[0];
+            row = ref[1];
+        }
+        // invalid format
+        else {
+            console.log("invalid reference format:", ref);
+        }
+
+        const sheet = this.workbooks[this.activeWorkbook].getWorksheet(this.activeSheet);
+        const cell = sheet.getCell(row, col);
+
+        // set value
+        if (format === "value") {
+            cell.value = value;
+        }
+        // set formula
+        else if (format === "formula") {
+            // if (typeof value === "object" && value.formula) {
+                cell.value = value; 
+
+        }
+        // set styles
+        else if (format === "style") {
+            if (typeof value === "object") {
+                Object.assign(cell.style, value);
+            } else {
+                console.error("style must be an object");
+            }
+        }
+        // invalid format
+        else {
+            return false;
+        }
+
+        return true;
+    }
+
+    setRange(ref, data, format = "value") {
+
+        // get starting address
+        const [[startCol, startRow]] = this.#refToAddress(ref);
+
+        // set single cell
+        if (typeof data === "number" || typeof data === "string") {
+            this.set([startCol, startRow], data, format);
+
+            return true;
+        }
+        // set row
+        else if (Array.isArray(data) && !Array.isArray(data[0])) {
+
+            for (let i = 0; i < data.length; i++) {
+                this.set([startCol, startRow], data[i], format);
+            }
+
+            return true;
+        }
+        // set rows & columns
+        else if (Array.isArray(data) && Array.isArray(data[0])) {
+
+            // loop over rows
+            for (let row = 0; row < data.length; row++) {
+
+                // loop over columns
+                for (let col = 0; col < data[row].length; col++) {
+                    this.set([startCol + col, startRow + row], data[row][col], format);
+                }
+            }
+
+            return true;
+        }
+        else {
+            console.error("invalid data format");
+
+            return false;
+        }
+
+    }
 
     /* clearing data */
 
@@ -729,11 +842,6 @@ export class Excel {
 
     fillValue() { }
     fillFormula() { }
-
-    /* styling */
-
-    setStyle() { }
-    setStyles() { }
 
     /* private */
 
